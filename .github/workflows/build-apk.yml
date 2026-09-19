@@ -16,14 +16,14 @@ jobs:
 
       - name: Extract PixelTask ZIP
         run: |
-          mkdir project
-          unzip "pixeltask (1).zip" -d project
+          mkdir -p project
+          unzip -o "pixeltask (1).zip" -d project
 
-          echo "=== Project files ==="
+          echo "=== Extracted files ==="
           find project -maxdepth 3 -type f | sort
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -38,11 +38,11 @@ jobs:
         run: |
           yes | sdkmanager --licenses >/dev/null || true
 
-      - name: Install Android SDK 35
+      - name: Install Android SDK 36
         run: |
           sdkmanager --install \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+            "platforms;android-36" \
+            "build-tools;36.0.0"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -51,34 +51,71 @@ jobs:
 
       - name: Find Android Project
         run: |
-          echo "=== Searching for settings.gradle ==="
+          echo "=== Searching for Android project ==="
 
           SETTINGS=$(find project -type f \( \
-            -name "settings.gradle" -o \
-            -name "settings.gradle.kts" \
+            -name "settings.gradle" \
+            -o -name "settings.gradle.kts" \
           \) | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle or settings.gradle.kts not found"
+            echo "ERROR: settings.gradle or settings.gradle.kts not found."
+            echo "=== Project contents ==="
+            find project -maxdepth 5 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
 
-          echo "Found project at:"
+          echo "Android project found:"
           echo "$PROJECT_DIR"
 
           echo "$PROJECT_DIR" > project_dir.txt
 
-      - name: Prepare Gradle Wrapper
+      - name: Inspect Android Project
         run: |
           PROJECT_DIR=$(cat project_dir.txt)
 
+          echo "=== Project directory ==="
           cd "$PROJECT_DIR"
+          pwd
+
+          echo "=== Project files ==="
+          find . -maxdepth 3 -type f | sort
+
+          echo "=== app/build.gradle.kts ==="
+          if [ -f "app/build.gradle.kts" ]; then
+            cat app/build.gradle.kts
+          fi
+
+      - name: Remove Unused Google Services
+        run: |
+          PROJECT_DIR=$(cat project_dir.txt)
+          cd "$PROJECT_DIR"
+
+          echo "=== Removing Google Services plugin from app ==="
+
+          if [ -f "app/build.gradle.kts" ]; then
+            sed -i '/google-services/d' app/build.gradle.kts
+            sed -i '/google.services/d' app/build.gradle.kts
+            sed -i '/firebase-bom/d' app/build.gradle.kts
+            sed -i '/firebase\.bom/d' app/build.gradle.kts
+          fi
+
+          echo "=== Updated app/build.gradle.kts ==="
+          cat app/build.gradle.kts
+
+      - name: Prepare Gradle Wrapper
+        run: |
+          PROJECT_DIR=$(cat project_dir.txt)
+          cd "$PROJECT_DIR"
+
+          echo "=== Checking Gradle Wrapper ==="
 
           if [ ! -f "gradlew" ]; then
             echo "gradlew not found."
             echo "Creating Gradle Wrapper..."
+
             gradle wrapper --gradle-version 9.7.1
           fi
 
@@ -87,18 +124,29 @@ jobs:
           echo "=== Gradle files ==="
           ls -la
 
+      - name: Check Android SDK
+        run: |
+          echo "=== Installed Android SDK ==="
+          sdkmanager --list_installed | grep -E \
+            "platforms;android-36|build-tools;36.0.0" || true
+
       - name: Build APK
         run: |
           PROJECT_DIR=$(cat project_dir.txt)
-
           cd "$PROJECT_DIR"
 
-          ./gradlew assembleDebug --no-daemon
+          echo "=== Building PixelTask APK ==="
+
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Find APK
         run: |
-          echo "=== APK files ==="
-          find project -type f -name "*.apk" -print
+          echo "=== Searching for APK ==="
+
+          find project \
+            -type f \
+            -name "*.apk" \
+            -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
