@@ -79,17 +79,12 @@ jobs:
           echo "=== Removing unused Google/Firebase configuration ==="
 
           if [ -f "app/build.gradle.kts" ]; then
-
-            # Remove Google Services plugin lines
             sed -i '/google-services/d' app/build.gradle.kts
             sed -i '/google.services/d' app/build.gradle.kts
             sed -i '/googleServices/d' app/build.gradle.kts
-
-            # Remove Firebase configuration
             sed -i '/firebase-bom/d' app/build.gradle.kts
             sed -i '/firebase\.bom/d' app/build.gradle.kts
             sed -i '/MissingGoogleServicesStrategy/d' app/build.gradle.kts
-
           fi
 
           echo "=== Checking remaining Google Services references ==="
@@ -97,25 +92,16 @@ jobs:
           if grep -nEi \
             'google-services|googleServices|google\.services|MissingGoogleServicesStrategy|firebase-bom|firebase\.bom' \
             app/build.gradle.kts; then
-
             echo "ERROR: Google/Firebase configuration still exists."
             exit 1
-
           else
-
             echo "No unwanted Google/Firebase configuration found."
-
           fi
-
-          echo "=== Final app/build.gradle.kts ==="
-          cat app/build.gradle.kts
 
       - name: Prepare Gradle Wrapper
         run: |
           PROJECT_DIR=$(cat project_dir.txt)
           cd "$PROJECT_DIR"
-
-          echo "=== Checking Gradle Wrapper ==="
 
           if [ ! -f "gradlew" ]; then
             echo "gradlew not found."
@@ -126,15 +112,25 @@ jobs:
 
           chmod +x gradlew
 
-          echo "=== Gradle files ==="
-          ls -la
-
-      - name: Check Android SDK
+      - name: Create Debug Keystore
         run: |
-          echo "=== Installed Android SDK ==="
+          PROJECT_DIR=$(cat project_dir.txt)
 
-          sdkmanager --list_installed | grep -E \
-            "platforms;android-36|build-tools;36.0.0" || true
+          echo "=== Creating debug.keystore ==="
+
+          keytool -genkeypair \
+            -v \
+            -keystore "$PROJECT_DIR/debug.keystore" \
+            -storepass android \
+            -keypass android \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+          echo "=== Debug keystore created ==="
+          ls -lh "$PROJECT_DIR/debug.keystore"
 
       - name: Build APK
         run: |
